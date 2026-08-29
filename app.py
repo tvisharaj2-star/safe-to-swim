@@ -121,7 +121,7 @@ if check:
             f"with {nsampleshigh30d:.0f} high sample(s) recorded recently."
         )
 
-    # 5. Factor breakdown
+    # 5. Data to show if its safe to swim
     st.divider()
     if rain_3d > 15:
         rain3_level = "High 🔴"
