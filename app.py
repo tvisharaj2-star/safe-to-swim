@@ -69,6 +69,7 @@ if check:
 
     # 1. Weather
     rain, temp = get_rainfall(coords["lat"], coords["lon"], picked_date)
+    
     if rain is None:
         st.warning("Weather data isn't available for that date. Try a date within the next 2 weeks or in the past.")
         st.stop()
@@ -78,12 +79,19 @@ if check:
     rain_7d = sum(rain[:-1])
     watertempc = temp[-1]
 
-    # 2. Bacteria history
+    # 2. Bacteria history (only records on or before the picked date)
     lake_rows = data[data["beach"] == lake].sort_values("collect date")
     if len(lake_rows) == 0:
         st.error(f"No historical data for {lake}.")
         st.stop()
-    latest = lake_rows.iloc[-1]
+
+    valid_rows = lake_rows[lake_rows["collect date"] <= pd.to_datetime(picked_date)]
+    if len(valid_rows) == 0:
+        st.error(f"No bacteria data available for {lake} before that date.")
+        st.stop()
+
+    latest = valid_rows.iloc[-1]
+    data_date = latest["collect date"].date()
     geomean30d = latest["geomean30d"]
     nsampleshigh30d = latest["nsampleshigh30d"]
 
@@ -99,7 +107,7 @@ if check:
     avg_label = "low" if geomean30d < 50 else "elevated"
     temp_label = "warm" if watertempc > 20 else "cool"
 
-    if prob > 0.30:
+    if prob > 0.20:
         st.error(f"⚠️ High risk at {lake} on {picked_date}")
         st.write(
             f"The water may not be safe for swimming today. "
