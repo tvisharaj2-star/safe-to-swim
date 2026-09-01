@@ -8,7 +8,7 @@ from streamlit_folium import st_folium
 
 st.set_page_config(page_title="Safe to Swim", page_icon="🏊", layout="centered")
 
-# ---------- Lakes ----------
+# All the Lakes!
 LAKES = {
     "Angle Lake":      {"lat": 47.42, "lon": -122.29},
     "Beaver Lake":     {"lat": 47.59, "lon": -122.02},
@@ -20,13 +20,13 @@ LAKES = {
     "Green Lake West": {"lat": 47.68, "lon": -122.34},
 }
 
-# ---------- Load model and data ----------
+#  Load model and data 
 model = joblib.load("model.pkl")
 data = pd.read_excel("combine_data.xlsx")
 data.columns = data.columns.str.strip()
 data["collect date"] = pd.to_datetime(data["collect date"])
 
-# ---------- Weather function ----------
+# Weather function
 def get_rainfall(lat, lon, date):
     date = pd.to_datetime(date).date()
     today = datetime.date.today()
@@ -55,7 +55,7 @@ st.caption("Know before you go — is it safe to swim in King County today?")
 tab1, tab2 = st.tabs(["Check a date", "Trends & forecast"])
 
 with tab1:
-    # clickable map
+    # the clciker!!!
     m = folium.Map(location=[47.55, -122.20], zoom_start=10)
     for name, info in LAKES.items():
         folium.Marker(
@@ -67,7 +67,7 @@ with tab1:
 
     map_result = st_folium(m, height=300, width=700)
 
-    # if a marker was clicked, remember it
+    
     if map_result and map_result.get("last_object_clicked_popup"):
         st.session_state["lake"] = map_result["last_object_clicked_popup"]
 
@@ -189,7 +189,7 @@ with tab1:
             high_level = "Low 🟢"
         st.write(f"**Recent high samples (30 days):** {nsampleshigh30d:.0f} — {high_level}")
 
-        # 6. Plain-English rain note
+        # 6. extra info
         st.divider()
         if rain_3d > 11:
             st.info("🌧️ It rained recently — this can raise bacteria levels through runoff, which carries pet/farm waste, fertilizer, oil, and bacteria like E. coli into the lake.")
@@ -213,3 +213,48 @@ with tab2:
         chart_data = recent.set_index("collect date")[["geomean30d"]]
         st.line_chart(chart_data)
         st.caption("30-day bacteria geometric mean at each King County test date.")
+        
+    #7-day forcast
+    
+        # 7-day risk forecast
+    st.divider()
+    st.subheader("Next 7 days")
+    st.caption("Predicted from the latest county test plus the weather forecast")
+
+    coords = LAKES[lake]
+    latest = lake_rows.iloc[-1]
+    f_geomean = latest["geomean30d"]
+    f_nhigh = latest["nsampleshigh30d"]
+    f_date = latest["collect date"].date()
+
+    cols = st.columns(7)
+    for i in range(7):
+        day = datetime.date.today() + datetime.timedelta(days=i)
+
+        rain, temp = get_rainfall(coords["lat"], coords["lon"], day)
+        if rain is None:
+            continue
+
+        f_rain_1d = rain[-2] if len(rain) >= 2 else 0
+        f_rain_3d = sum(rain[-4:-1])
+        f_rain_7d = sum(rain[:-1])
+        f_temp = temp[-1]
+
+        f_features = pd.DataFrame([{
+            "rain_1d": f_rain_1d, "rain_3d": f_rain_3d, "rain_7d": f_rain_7d,
+            "watertempc": f_temp, "geomean30d": f_geomean,
+            "nsampleshigh30d": f_nhigh,
+        }])
+        f_prob = model.predict_proba(f_features)[0][1]
+
+        with cols[i]:
+            st.write(f"**{day.strftime('%a')}**")
+            st.write("🔴" if f_prob > 0.20 else "🟢")
+            st.write(f"{f_prob:.0%}")
+
+    st.caption(
+        f"Forecast uses King County's most recent test ({f_date}) with predicted "
+        f"rainfall. Bacteria are not re-measured daily."
+    )
+
+    
