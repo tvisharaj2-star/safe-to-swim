@@ -26,3 +26,5 @@ print(classification_report(y_test, pred, target_names=["Safe", "Unsafe"]))
 
 joblib.dump(model, "model.pkl")
 print("Model saved as model.pkl")
+
+print("Training rows:", len(X), "| Unsafe:", int(y.sum()))

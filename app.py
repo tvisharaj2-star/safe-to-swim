@@ -8,23 +8,61 @@ from streamlit_folium import st_folium
 
 st.set_page_config(page_title="Safe to Swim", page_icon="🏊", layout="centered")
 
+
 # All the Lakes!
 LAKES = {
-    "Angle Lake":      {"lat": 47.42, "lon": -122.29},
-    "Beaver Lake":     {"lat": 47.59, "lon": -122.02},
-    "Echo Lake":       {"lat": 47.77, "lon": -122.34},
-    "Enatai":          {"lat": 47.59, "lon": -122.19},
-    "Fivemile Lake":   {"lat": 47.36, "lon": -122.30},
-    "Gene Coulon":     {"lat": 47.50, "lon": -122.20},
-    "Green Lake East": {"lat": 47.68, "lon": -122.32},
-    "Green Lake West": {"lat": 47.68, "lon": -122.34},
+    "Angle Lake":                {"lat": 47.4230, "lon": -122.2960},
+    "Beaver Lake":               {"lat": 47.5920, "lon": -122.0230},
+    "Echo Lake":                 {"lat": 47.7740, "lon": -122.3420},
+    "Enatai":                    {"lat": 47.5870, "lon": -122.1960},
+    "Fivemile Lake":             {"lat": 47.3560, "lon": -122.2990},
+    "Gene Coulon":               {"lat": 47.5030, "lon": -122.2020},
+    "Green Lake East":           {"lat": 47.6800, "lon": -122.3250},
+    "Green Lake West":           {"lat": 47.6800, "lon": -122.3410},
+    "Groveland":                 {"lat": 47.5610, "lon": -122.2280},
+    "Houghton":                  {"lat": 47.6560, "lon": -122.2080},
+    "Idylwood":                  {"lat": 47.6360, "lon": -122.1170},
+    "Juanita":                   {"lat": 47.7030, "lon": -122.2090},
+    "Kennydale":                 {"lat": 47.5150, "lon": -122.2000},
+    "Lake Meridian":             {"lat": 47.3690, "lon": -122.1450},
+    "Lake Sammamish State Park": {"lat": 47.5560, "lon": -122.0640},
+    "Lake Wilderness":           {"lat": 47.3720, "lon": -122.0430},
+    "Luther Burbank":            {"lat": 47.5900, "lon": -122.2260},
+    "Madison Park":              {"lat": 47.6360, "lon": -122.2760},
+    "Madrona":                   {"lat": 47.6100, "lon": -122.2830},
+    "Magnuson":                  {"lat": 47.6810, "lon": -122.2490},
+    "Matthews":                  {"lat": 47.6960, "lon": -122.2740},
+    "Meydenbauer":               {"lat": 47.6180, "lon": -122.2100},
+    "Mt Baker":                  {"lat": 47.5850, "lon": -122.2860},
+    "Newcastle":                 {"lat": 47.5390, "lon": -122.2050},
+    "Pine Lake":                 {"lat": 47.6030, "lon": -122.0330},
+    "Pritchard":                 {"lat": 47.5540, "lon": -122.2680},
+    "Rattlesnake Lake":          {"lat": 47.4330, "lon": -121.7800},
+    "Sammamish Landing":         {"lat": 47.6280, "lon": -122.0870},
+    "Seward Park":               {"lat": 47.5510, "lon": -122.2570},
+    "Waverly Park":              {"lat": 47.6810, "lon": -122.2060},
 }
 
 #  Load model and data 
 model = joblib.load("model.pkl")
-data = pd.read_excel("combine_data.xlsx")
-data.columns = data.columns.str.strip()
-data["collect date"] = pd.to_datetime(data["collect date"])
+
+#live loading with fallback
+@st.cache_data(ttl=3600)
+def load_beach_data():
+    url = "https://data.kingcounty.gov/resource/mbzm-4r9y.csv?$limit=50000"
+    try:
+        df = pd.read_csv(url)
+        source = "live"
+    except Exception:
+        df = pd.read_csv("bacteria_backup.csv")
+        source = "backup"
+    df.columns = df.columns.str.strip().str.lower()
+    df["date"] = pd.to_datetime(df["date"])
+    return df, source
+
+data, source = load_beach_data()
+if source == "backup":
+    st.warning("Couldn't reach King County — using saved data.")
 
 # Weather function
 def get_rainfall(lat, lon, date):
@@ -98,18 +136,18 @@ with tab1:
         watertempc = temp[-1]
 
         # 2. Bacteria history (only records on or before the picked date)
-        lake_rows = data[data["beach"] == lake].sort_values("collect date")
+        lake_rows = data[data["beach"] == lake].sort_values("date")
         if len(lake_rows) == 0:
             st.error(f"No historical data for {lake}.")
             st.stop()
 
-        valid_rows = lake_rows[lake_rows["collect date"] <= pd.to_datetime(picked_date)]
+        valid_rows = lake_rows[lake_rows["date"] <= pd.to_datetime(picked_date)]
         if len(valid_rows) == 0:
             st.error(f"No bacteria data available for {lake} before that date.")
             st.stop()
 
         latest = valid_rows.iloc[-1]
-        data_date = latest["collect date"].date()
+        data_date = latest["date"].date()
         geomean30d = latest["geomean30d"]
         nsampleshigh30d = latest["nsampleshigh30d"]
 
@@ -205,12 +243,12 @@ with tab2:
     lake = st.session_state.get("lake", list(LAKES.keys())[0])
     st.subheader(f"Past tests — {lake}")
 
-    lake_rows = data[data["beach"] == lake].sort_values("collect date")
+    lake_rows = data[data["beach"] == lake].sort_values("date")
     if len(lake_rows) == 0:
         st.warning("No historical data for this lake.")
     else:
         recent = lake_rows.tail(10)
-        chart_data = recent.set_index("collect date")[["geomean30d"]]
+        chart_data = recent.set_index("date")[["geomean30d"]]
         st.line_chart(chart_data)
         st.caption("30-day bacteria geometric mean at each King County test date.")
         
@@ -225,7 +263,7 @@ with tab2:
     latest = lake_rows.iloc[-1]
     f_geomean = latest["geomean30d"]
     f_nhigh = latest["nsampleshigh30d"]
-    f_date = latest["collect date"].date()
+    f_date = latest["date"].date()
 
     cols = st.columns(7)
     for i in range(7):
