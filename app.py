@@ -65,6 +65,7 @@ if source == "backup":
     st.warning("Couldn't reach King County — using saved data.")
 
 # Weather function
+@st.cache_data(ttl=3600)
 def get_rainfall(lat, lon, date):
     date = pd.to_datetime(date).date()
     today = datetime.date.today()
@@ -80,7 +81,10 @@ def get_rainfall(lat, lon, date):
         "&daily=precipitation_sum,temperature_2m_max"
         "&timezone=America/Los_Angeles"
     )
-    r = requests.get(url).json()
+    try:
+        r = requests.get(url, timeout=10).json()
+    except Exception:
+        return None, None
     if "daily" not in r:
         return None, None
     return r["daily"]["precipitation_sum"], r["daily"]["temperature_2m_max"]
@@ -124,7 +128,7 @@ with tab1:
     if check:
         coords = LAKES[lake]
 
-        # 1. Weather
+        # 1. Weather- using air temperature as proxy for water temp
         rain, temp = get_rainfall(coords["lat"], coords["lon"], picked_date)
         if rain is None:
             st.warning("Weather data isn't available for that date. Try a date within the next 2 weeks or in the past.")
@@ -137,6 +141,7 @@ with tab1:
 
         # 2. Bacteria history (only records on or before the picked date)
         lake_rows = data[data["beach"] == lake].sort_values("date")
+        lake_rows = lake_rows.dropna(subset=["geomean30d", "nsampleshigh30d"])
         if len(lake_rows) == 0:
             st.error(f"No historical data for {lake}.")
             st.stop()
@@ -160,31 +165,56 @@ with tab1:
         prob = model.predict_proba(features)[0][1]
 
         # 4. Result
-        avg_label = "low" if geomean30d < 50 else "elevated"
+        if geomean30d > 100:
+            avg_label = "high"
+        elif geomean30d > 50:
+            avg_label = "moderate"
+        else:
+            avg_label = "low"
         temp_label = "warm" if watertempc > 20 else "cool"
 
         if prob > 0.20:
             st.error(f"⚠️ High risk at {lake} on {picked_date}")
+
+            if rain_3d > 5:
+                reason = (
+                    f"About {rain_3d:.0f} mm of rain fell over the last 3 days, "
+                    f"washing bacteria into the lake. "
+                )
+            else:
+                reason = (
+                    "There was little recent rain, so the risk comes mainly from "
+                    "the lake's recent bacteria levels. "
+                )
+
             st.write(
-                f"The water may not be safe for swimming today. "
-                f"About {rain_3d:.0f} mm of rain fell over the last 3 days, "
-                f"washing bacteria into the lake. "
-                f"The water is also fairly {temp_label} at {watertempc:.0f}°C, "
-                f"and warmer water lets bacteria grow faster. "
+                f"The water may not be safe for swimming today. " + reason +
+                f"The water is {temp_label} at {watertempc:.0f}°C. "
                 f"The lake's 30-day bacteria average is {geomean30d:.0f} ({avg_label}), "
                 f"with {nsampleshigh30d:.0f} high sample(s) recorded recently."
             )
+    
+      
         else:
             st.success(f"✅ Low risk at {lake} on {picked_date}")
+
+            if rain_3d > 5:
+                reason = (
+                    f"About {rain_3d:.0f} mm of rain fell over the last 3 days, "
+                    f"but this lake's recent bacteria levels have stayed low. "
+                )
+            else:
+                reason = (
+                    f"Only about {rain_3d:.0f} mm of rain fell over the last 3 days, "
+                    f"so little bacteria has washed into the lake. "
+                )
+
             st.write(
-                f"The water looks safe for swimming today. "
-                f"Only about {rain_3d:.0f} mm of rain fell over the last 3 days, "
-                f"so little bacteria has washed into the lake. "
-                f"The water is {temp_label} at {watertempc:.0f}°C, which slows bacteria growth. "
+                f"The water looks safe for swimming today. " + reason +
+                f"The water is {temp_label} at {watertempc:.0f}°C. "
                 f"The lake's 30-day bacteria average is {geomean30d:.0f} ({avg_label}), "
                 f"with {nsampleshigh30d:.0f} high sample(s) recorded recently."
             )
-
         # 5. Factor breakdown
         st.divider()
         if rain_3d > 15:
@@ -244,8 +274,10 @@ with tab2:
     st.subheader(f"Past tests — {lake}")
 
     lake_rows = data[data["beach"] == lake].sort_values("date")
+    lake_rows = lake_rows.dropna(subset=["geomean30d", "nsampleshigh30d"])
     if len(lake_rows) == 0:
         st.warning("No historical data for this lake.")
+        st.stop()
     else:
         recent = lake_rows.tail(10)
         chart_data = recent.set_index("date")[["geomean30d"]]
@@ -257,7 +289,7 @@ with tab2:
         # 7-day risk forecast
     st.divider()
     st.subheader("Next 7 days")
-    st.caption("Predicted from the latest county test plus the weather forecast")
+    st.caption("Estimated percent chance the water is unsafe, based on the latest county test plus the weather forecast")
 
     coords = LAKES[lake]
     latest = lake_rows.iloc[-1]
