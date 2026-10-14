@@ -188,7 +188,7 @@ with tab1:
                 )
 
             st.write(
-                f"The water may not be safe for swimming today. " + reason +
+                f"The water may not be safe for swimming. " + reason +
                 f"The water is {temp_label} at {watertempc:.0f}°C. "
                 f"The lake's 30-day bacteria average is {geomean30d:.0f} ({avg_label}), "
                 f"with {nsampleshigh30d:.0f} high sample(s) recorded recently."
@@ -210,7 +210,7 @@ with tab1:
                 )
 
             st.write(
-                f"The water looks safe for swimming today. " + reason +
+                f"The water looks safe for swimming. " + reason +
                 f"The water is {temp_label} at {watertempc:.0f}°C. "
                 f"The lake's 30-day bacteria average is {geomean30d:.0f} ({avg_label}), "
                 f"with {nsampleshigh30d:.0f} high sample(s) recorded recently."
