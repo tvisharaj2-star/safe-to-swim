@@ -91,7 +91,7 @@ def get_rainfall(lat, lon, date):
 
 # ---------- Header ----------
 st.title("🏊 Safe to Swim")
-st.caption("Know before you go — is it safe to swim in King County today or in the future?")
+st.caption("Know before you go — is it safe to swim in King County today and the days ahead?")
 
 # ---------- Tabs ----------
 tab1, tab2 = st.tabs(["Check a date", "Trends & forecast"])
